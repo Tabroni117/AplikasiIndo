@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <title>Stok Produk</title>
+  <link rel="icon" type="image/png" href="favicon.png">
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; background-color: #f0f0f0; }
+    .header { display: flex; justify-content: space-between; align-items: center; }
+    .datetime { font-weight: bold; color: green; }
+    input { padding: 10px; margin: 5px 0; font-size: 16px; border-radius: 6px; border: 1px solid #ccc; width: 53%; }
+    button { padding: 6px; margin: 6px 6px 6px 0; border: none; border-radius: 6px; color: white; font-size: 14px; width: auto; }
+    #whatsapp { background-color: #25d366; }
+    #print, #clear { background-color: #6c757d; }
+    #Lihat, #Tambah { background-color: #007bff; }
+    table { width: 57%; margin-top: 20px; border-collapse: collapse; }
+    th, td { border: 1px solid #aaa; padding: 10px; text-align: center; }
+    .autocomplete-items { position: absolute; border: 1px solid #d4d4d4; background-color: #fff; z-index: 99; top: 100%; left: 0; right: 0; }
+    .autocomplete-item { padding: 10px; cursor: pointer; border-bottom: 1px solid #ccc; }
+    .autocomplete-item:hover, .autocomplete-active { background-color: #e9e9e9; }
+    .autocomplete { position: relative; }
+    .buah-container { margin-top: 20px; }
+    .buah-list { display: flex; flex-wrap: wrap; gap: 10px; }
+    .buah-item { padding: 8px 15px; background-color: #dff0d8; border: 1px solid #a5d6a7; border-radius: 8px; font-weight: bold; color: #2e7d32; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h2>📦 Rujak Buah Indonesia</h2>
+    <div class="datetime" id="datetime"></div>
+  </div>
+  <div class="autocomplete">
+    <input type="text" id="nama" placeholder="Nama Produk" autocomplete="off" />
+  </div>
+  <div class="autocomplete">
+    <input type="text" id="jumlah" placeholder="Jumlah Produk" autocomplete="off" />
+  </div>
+  <button id="Lihat" onclick="tampilkanSisaBuah()">Lihat Buah</button>
+  <button id="Tambah" onclick="tambahProduk()">Tambah Produk</button>
+  <button id="clear" onclick="hapusSemua()">Hapus Semua</button>
+  <button id="whatsapp" onclick="kirimWhatsApp()">Kirim WhatsApp</button>
+  <table id="tabel">
+    <thead><tr><th>No</th><th>Produk</th><th>Jumlah</th><th>Edit</th><th>Hapus</th></tr></thead>
+    <tbody></tbody>
+  </table>
+  <div id="buahBelumDitambahkan" class="buah-container"></div>
+  <script>
+    const produkOtomatis = [
+      "Gula Pedas", "Gula Extra Pedas", "Gula Tidak Pedas", "Kantong Kresek", "Plastik 1/2 Kg", "Kupas Buah", "Isi Staples", "Aida",
+      "Kacang", "Garpu", "Box 500 Ml", "Box 750 ml", "Box 1000 ml", "Box 650 Ml", "Cup 100 Ml", "Plastik Putih Gede", "Tisu", "Garam", "Plastik Klip", "Sarung Tangan"
+    ];
+    const satuanOtomatis = ["KG", "PCs"];
+    let produkList = [], editIndex = -1;
+    let currentFocusNama = -1, currentFocusJumlah = -1;
+    function autocomplete(inp, arr, isJumlah = false) {
+      inp.addEventListener("input", function () {
+        let val = this.value;
+        closeAllLists();
+        if (!val) return false;
+        const listDiv = document.createElement("DIV");
+        listDiv.setAttribute("id", this.id + "autocomplete-list");
+        listDiv.setAttribute("class", "autocomplete-items");
+        this.parentNode.appendChild(listDiv);
+        arr.forEach(item => {
+          const itemDiv = document.createElement("DIV");
+          itemDiv.innerHTML = item;
+          itemDiv.classList.add("autocomplete-item");
+          itemDiv.addEventListener("click", function () {
+            inp.value = isJumlah ? (inp.value.replace(/ *\b(KG|PCs)\b/, '') + " " + item).trim() : item;
+            closeAllLists();
+          });
+          listDiv.appendChild(itemDiv);
+        });
+      });
+      inp.addEventListener("keydown", function (e) {
+        let list = document.getElementById(this.id + "autocomplete-list");
+        if (list) list = list.getElementsByTagName("div");
+        let currentFocus = isJumlah ? currentFocusJumlah : currentFocusNama;
+        if (e.keyCode == 40) currentFocus++;
+        else if (e.keyCode == 38) currentFocus--;
+        else if (e.keyCode == 13) {
+          e.preventDefault();
+          if (currentFocus > -1 && list && list[currentFocus]) list[currentFocus].click();
+        }
+        if (isJumlah) currentFocusJumlah = currentFocus;
+        else currentFocusNama = currentFocus;
+        if (list) {
+          Array.from(list).forEach((item, i) => {
+            item.classList.toggle("autocomplete-active", i === currentFocus);
+          });
+        }
+      });
+      function closeAllLists(elmnt) {
+        const items = document.getElementsByClassName("autocomplete-items");
+        for (let item of items) {
+          if (elmnt != item && elmnt != inp) item.parentNode.removeChild(item);
+        }
+      }
+      document.addEventListener("click", function (e) { closeAllLists(e.target); });
+    }
+    autocomplete(document.getElementById("nama"), produkOtomatis);
+    autocomplete(document.getElementById("jumlah"), satuanOtomatis, true);
+    document.getElementById("nama").addEventListener("keydown", e => { if (e.key === "Enter") document.getElementById("jumlah").focus(); });
+    document.getElementById("jumlah").addEventListener("keydown", e => { if (e.key === "Enter") tambahProduk(); });
+    function tambahProduk() {
+      const nama = document.getElementById("nama").value.trim();
+      const jumlah = document.getElementById("jumlah").value.trim();
+      if (!nama || !jumlah) return alert("⚠️ Harap isi semua kolom.");
+      if (editIndex === -1) produkList.push({ nama, jumlah });
+      else { produkList[editIndex] = { nama, jumlah }; editIndex = -1; }
+      document.getElementById("nama").value = "";
+      document.getElementById("jumlah").value = "";
+      renderTabel(); tampilkanSisaBuah();
+    }
+    function editProduk(index) {
+      const p = produkList[index];
+      document.getElementById("nama").value = p.nama;
+      document.getElementById("jumlah").value = p.jumlah;
+      editIndex = index;
+    }
+    function hapusProduk(index) {
+      if (confirm(`Yakin ingin menghapus produk "${produkList[index].nama}"?`)) {
+        produkList.splice(index, 1);
+        renderTabel(); tampilkanSisaBuah();
+      }
+    }
+    function renderTabel() {
+      const tbody = document.querySelector("#tabel tbody");
+      tbody.innerHTML = "";
+      produkList.forEach((p, i) => {
+        tbody.innerHTML += `
+          <tr>
+            <td>${i + 1}</td>
+            <td>${p.nama}</td>
+            <td>${p.jumlah}</td>
+            <td><button onclick="editProduk(${i})">✏️</button></td>
+            <td><button onclick="hapusProduk(${i})">🗑️</button></td>
+          </tr>`;
+      });
+    }
+    function hapusSemua() {
+      if (confirm("Yakin ingin menghapus semua data?")) {
+        produkList = [];
+        renderTabel(); tampilkanSisaBuah();
+      }
+    }
+    function tampilkanSisaBuah() {
+      const sudahAda = produkList.map(p => p.nama.toLowerCase());
+      const belumAda = produkOtomatis.filter(buah => !sudahAda.includes(buah.toLowerCase()));
+      const container = document.getElementById("buahBelumDitambahkan");
+      if (belumAda.length === 0) {
+        container.innerHTML = "<p>🎉 Semua buah sudah ditambahkan!</p>";
+        return;
+      }
+      let html = "<h3>🍎 Buah Belum Ditambahkan:</h3><div class='buah-list'>";
+      belumAda.forEach(buah => {
+        html += `<div class="buah-item" onclick="tambahDariSisa('${buah}')">${buah}</div>`;
+      });
+      html += "</div>";
+      container.innerHTML = html;
+    }
+    function tambahDariSisa(namaBuah) {
+      const jumlahDefault = "1 KG";
+      produkList.push({ nama: namaBuah, jumlah: jumlahDefault });
+      renderTabel(); tampilkanSisaBuah();
+    }
+    function kirimWhatsApp() {
+      if (produkList.length === 0) return alert("📭 Data masih kosong!");
+      const now = new Date();
+      const tanggal = now.toLocaleDateString("id-ID");
+      const jam = now.toLocaleTimeString("id-ID");
+      let pesan = `📦 *Data Stok Produk*
+🕒 ${tanggal} - ${jam}
+
+`;
+      produkList.forEach((p, i) => {
+        pesan += `${i + 1}. ${p.nama} - ${p.jumlah}
+`;
+      });
+      const url = `https://wa.me/?text=${encodeURIComponent(pesan)}`;
+      window.open(url, "_blank");
+    }
+    function updateDatetime() {
+      const now = new Date();
+      const tgl = now.toLocaleDateString("id-ID");
+      const jam = now.toLocaleTimeString("id-ID");
+      document.getElementById("datetime").textContent = `📅 ${tgl} - 🕒 ${jam}`;
+    }
+    updateDatetime();
+    setInterval(updateDatetime, 1000);
+  </script>
+</body>
+</html>
